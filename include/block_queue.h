@@ -20,88 +20,44 @@ public:
             exit(-1);
         m_max_size = max_size; 
     }
-    bool full()
-    {
-        m_mutex.lock();
-        if(m_queue.size() >= m_max_size)
-        {
-            m_mutex.unlock();
-            return true;
-        }
-        m_mutex.unlock();
-        return false;
-    }
-    bool empty()
-    {
-        m_mutex.lock();
-        if(m_queue.size() == 0)
-        {
-            m_mutex.unlock();
-            return true;
-        }
-        m_mutex.unlock();
-        return false;
-    }
-    // 获取队首元素
-    bool get_front(T &value)
-    {
-        m_mutex.lock();
-        if(m_queue.size() == 0)
-        {
-            m_mutex.unlock();
-            return false;
-        }
-        value = m_queue.front();
-        m_mutex.unlock();
-        return true;
-    }
-    // 获取队尾元素
-    bool get_back(T &value)
-    {
-        m_mutex.lock();
-        if(m_queue.size() == 0)
-        {
-            m_mutex.unlock();
-            return false;
-        }
-        value = m_queue.back();
-        m_mutex.unlock();
-        return true;
-    }
-    // 获取队列的大小
-    int get_size()
-    {
-        int tmp = 0;
-        m_mutex.lock();
-        tmp = m_queue.size();
-        m_mutex.unlock();
-        return tmp;
-    }
-    // 添加元素
     bool push(const T &item)
     {
         m_mutex.lock();
         //阻塞队列满了的话，就唤醒阻塞的处理线程
-        if(m_queue.size() >= m_max_size)
+        while(m_queue.size() >= m_max_size)
         {
-            m_cond.broadcast();
-            m_mutex.unlock();
-            return false; 
+            m_cond_canpop.broadcast();
+            m_cond_canpush.wait(m_mutex.get());
+ 
         }
         m_queue.push(item);
-        m_cond.broadcast();
+        m_cond_canpop.broadcast();
         return true;
     }
-    //
-    bool pop()
+    
+    bool pop(T &item)
     {
-        
+        m_mutex.lock();
+        while(m_queue.size()<=0)
+        {
+            if(!m_cond_canpop.wait(m_mutex.get()))//获得锁的指针
+            {
+                m_mutex.unlock();
+                return false;
+            }
+        }
+        item = m_queue.front();
+        m_queue.pop();// 将队首弹出
+        m_mutex.unlock();
+        m_cond_canpush.broadcast();
+        return true;
     }
 private:
     int m_max_size; //阻塞队列的最大长度
     queue<T> m_queue; //队列是共享资源，使用与队列相关的函数时，要加锁
     locker m_mutex;
-    cond m_cond; //条件变量
+    cond m_cond_canpop;  //条件变量,可以取队首元素
+    cond m_cond_canpush; //可以push到队尾
 };
 
 #endif
