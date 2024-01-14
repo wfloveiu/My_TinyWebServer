@@ -20,8 +20,9 @@ int main(int argc, char * argv[])
     //初始化日志
     server.log_write();
 
+    server.sql_pool();
 
-    
+    server.TRIGMod();
 
     
 

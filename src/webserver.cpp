@@ -5,7 +5,8 @@
 //默认构造
 Websever::Websever()
 {
-
+    m_sqlUrl = "localhost";
+    m_sqlPort = 3306;
 }
 
 Websever::~Websever()
@@ -43,7 +44,43 @@ void Websever::log_write()
     }
 }
 
+void Websever::TRIGMod()
+{
+    if(m_trigmod == 0)
+    {
+        m_LISTENTrigmode = 0;
+        m_CONNTrigmode = 0;
+
+    }
+    else if(m_trigmod == 1)
+    {
+        m_LISTENTrigmode = 0;
+        m_CONNTrigmode = 1;
+    }
+    else if(m_trigmod == 2)
+    {
+        m_LISTENTrigmode == 1;
+        m_CONNTrigmode = 0;
+    }
+    else if(m_trigmod == 3)
+    {
+        m_LISTENTrigmode = 1;
+        m_CONNTrigmode = 1;
+    }
+}
+
 void Websever::sql_pool()
 {
-    
+    //类的static函数只能通过类名加::来调用
+    m_connection_pool = connection_pool::GetInstance();
+
+    // 初始化数据库连接池
+    m_connection_pool->init(m_sqlUrl, m_user, m_password, m_databasename, m_sqlPort, m_sql_num, m_close_log);
+
+    //初始化数据库读取表
+}
+
+void Websever::thread_pool()
+{
+    m_threadpool = new threadpool<http_conn>(m_actor_model, m_connection_pool, m_thread_num);
 }
