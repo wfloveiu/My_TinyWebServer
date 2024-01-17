@@ -1,5 +1,7 @@
 #include "lst_timer.h"
 
+
+
 sort_timer_lst::sort_timer_lst():head(NULL), tail(NULL)
 {
 
@@ -127,7 +129,7 @@ void sort_timer_lst::tick()
     {
         if(cur < tmp->expire)
             break;
-        tmp->callback_function(); //!!
+        tmp->callback_function(tmp->user_data); //!!
         
         // 此时这个tmp就是头节点，将它从链表中删除前，需要重置头节点
         head = tmp->next;
@@ -135,4 +137,82 @@ void sort_timer_lst::tick()
         delete tmp;
         tmp = head;
     }
+}
+void Utils::init(int timeslot)
+{
+    m_TIMESLOT = timeslot;
+}
+
+int Utils::setnonblocking(int fd)
+{
+    int old_option = fcntl(fd, F_GETFL);
+    int new_option = old_option | O_NONBLOCK;
+    fcntl(fd, F_SETFL, new_option);
+    return new_option;
+}
+
+void Utils::addfd(int epollfd, int fd, bool one_shot, int TRIGMod)
+{
+    epoll_event event;
+    event.data.fd = fd;
+
+    if(1 == TRIGMod) //1表示ET边沿触发
+        event.events = EPOLLIN | EPOLLET | EPOLLRDHUP; //读事件，边沿触发
+    else    
+        event.events = EPOLLIN | EPOLLRDHUP;
+    
+    //同一时刻只能有一个进程处理这个文件，对于监听描述符，不能设置这个
+    if(one_shot)
+        event.events |= EPOLLONESHOT;
+
+    epoll_ctl(epollfd, EPOLL_CTL_ADD, fd, &event);
+    //ET还是LT，这里都是把它设置成非阻塞
+    setnonblocking(fd);
+}
+
+
+void Utils::timer_handler()
+{
+    m_timer_lst.tick();
+    alarm(m_TIMESLOT);
+}
+
+void Utils::addsig(int sig, void(handler)(int), bool restart)
+{
+    struct sigaction sa;
+    memset(&sa, '\0', sizeof(sa));
+    sa.sa_handler = handler;
+    if(restart)
+        sa.sa_flags |= SA_RESTART;
+    /*
+    sa_mask指定在信号处理的过程中哪些信号被阻塞
+    这里使用sigfillset将所有的信号加入sa_mask，从而在信号处理时阻塞所有信号
+    */ 
+   sigfillset(&sa.sa_mask);
+   // sigaction函数用于注册信号
+   assert(sigaction(sig, &sa, NULL) != -1);
+}
+
+void Utils::sig_handler(int sig)
+{   
+    int save_errno = errno;
+    int msg = sig;
+    //向管道接收端发送信号
+    send(u_pipefd[1], (char *)&msg, 1, 0);
+    errno = save_errno;
+}
+//静态变量初始化
+int * Utils::u_pipefd = 0;
+int Utils::u_epollfd = 0;
+
+//实现callback函数
+class Utils;
+void callback_function(client_data *user_data)
+{
+    //删除掉epoll中这个用户的文件描述符
+    epoll_ctl(Utils::u_epollfd, EPOLL_CTL_DEL, user_data->sockfd, 0);
+    //关闭连接
+    close(user_data->sockfd);
+
+    http_conn::m_user_count--;
 }

@@ -2,6 +2,7 @@
 
 
 
+
 //默认构造
 Websever::Websever()
 {
@@ -83,4 +84,44 @@ void Websever::sql_pool()
 void Websever::thread_pool()
 {
     m_threadpool = new threadpool<http_conn>(m_actor_model, m_connection_pool, m_thread_num);
+}
+
+void Websever::eventListen()
+{
+    //创建监听套接字，成功返回>=0
+    m_listenfd = socket(PF_INET, SOCK_STREAM, 0);
+    assert(m_listenfd >= 0);//使用assert函数检验文件描述符是否>=0，<0就打印错误并终止程序
+
+    //设置连接关闭的方式
+    if(0 == m_opt_linger)
+    {
+        struct linger tmp = {0, 1}; 
+        setsockopt(m_listenfd, SOL_SOCKET, SO_LINGER, &tmp, sizeof(tmp));
+    }
+    else if(1 == m_opt_linger)
+    {
+        struct linger tmp = {1, 1};
+        setsockopt(m_listenfd, SOL_SOCKET, SO_LINGER, &tmp, sizeof(tmp));
+    }
+
+    //创建ipv4监听地址
+    struct sockaddr_in address; //需要<netinet/in.h>
+    bzero(&address, sizeof(address));
+    address.sin_family = AF_INET;
+    address.sin_addr.s_addr = htonl(INADDR_ANY);
+    address.sin_port = htons(m_port);
+
+    int flag = 1;
+    // 设置SO_REUSEADDR可以强制使用处于TIME_WAIT状态的连接占用的socket,在重启服务器时能马上重新绑上原来的端口
+    setsockopt(m_listenfd, SOL_SOCKET, SO_REUSEADDR, &flag, sizeof(flag));
+
+    //绑定IP地址和监听套接字
+    int ret = bind(m_listenfd, (struct sockaddr *)&address, sizeof(address));
+    assert(ret >= 0);
+
+    //开始监听
+    ret = listen(m_listenfd, 5);
+    assert(ret >= 0);
+
+
 }

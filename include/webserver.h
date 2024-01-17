@@ -8,6 +8,11 @@
 #include "log.h"
 #include "sql_connection_pool.h"
 #include "threadpool.h"
+#include <sys/socket.h>
+#include <cassert>
+#include <netinet/in.h>
+#include "lst_timer.h"
+
 using namespace std;
 
 const int MAX_FD = 65536; //最大的连接数
@@ -33,6 +38,9 @@ public:
 
     //触发模式
     void TRIGMod();
+
+    //监听连接
+    void eventListen();
 private:
 
 public:
@@ -40,6 +48,7 @@ public:
     int m_port;
     //写日志的方式，0同步，1异步
     int m_log_write;
+    //优雅关闭连接，0不使用，1使用
     int m_opt_linger;
     int m_trigmod;
     //listenfd模式
@@ -50,6 +59,8 @@ public:
     int m_close_log;
     int m_actor_model;
 
+    //监听连接的套接字
+    int m_listenfd;
     /*数据库相关*/
 
     connection_pool * m_connection_pool;
@@ -66,6 +77,10 @@ public:
     threadpool<http_conn> * m_threadpool;
     //线程池中的最大连接数
     int m_thread_num;
+
+    //定时器相关
+    client_data *user_data;
+    Utils utils;
 };
 
 
