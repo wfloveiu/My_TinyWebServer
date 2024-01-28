@@ -2,7 +2,7 @@
 #define LOG_H
 
 #include "block_queue.h"
-#include "locker.h"
+#include "../lock/locker.h"
 #include <stdio.h>
 #include <iostream>
 #include <string>

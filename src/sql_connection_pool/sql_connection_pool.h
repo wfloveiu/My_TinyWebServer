@@ -6,8 +6,8 @@
 #include <string>
 #include <mysql/mysql.h>
 #include <list>
-#include "log.h"
-#include "locker.h"
+#include "../log/log.h"
+#include "../lock/locker.h"
 using namespace std;
 
 // 单例模式

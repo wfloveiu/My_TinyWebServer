@@ -13,6 +13,7 @@
 #include <signal.h>
 #include <cassert>
 #include <netinet/in.h>
+
 // #include <cerrno>
 class util_timer;//前向声明，因为在client_data中使用了util_timer类
 
@@ -73,10 +74,12 @@ public:
     //定时处理任务，重新定时以不断触发SIGALRM信号
     void timer_handler();
 
-    void addsig(int sig, void(handler)(int), bool restart);
+    void addsig(int sig, void(handler)(int), bool restart = true);
 
-    // 信号处理函数
-    void sig_handler(int sig);
+    // 信号处理函数,设置为静态函数
+    static void sig_handler(int sig);
+
+    void show_error(int connfd, const char *info);
 public:
     //发送alarm的周期
     int m_TIMESLOT;

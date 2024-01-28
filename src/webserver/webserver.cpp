@@ -8,6 +8,19 @@ Websever::Websever()
 {
     m_sqlUrl = "localhost";
     m_sqlPort = 3306;
+
+    users = new http_conn[MAX_FD];
+
+    //root文件夹路径
+    char server_path[200];
+    getcwd(server_path, 200);
+    char root[6] = "/root";
+    m_root = (char *)malloc(strlen(server_path) + strlen(root) + 1);
+    strcpy(m_root, server_path);
+    strcat(m_root, root);
+
+    user_timer = new client_data[MAX_FD];
+
 }
 
 Websever::~Websever()
@@ -123,5 +136,89 @@ void Websever::eventListen()
     ret = listen(m_listenfd, 5);
     assert(ret >= 0);
 
+    //初始化定时器工具
+    utils.init(TIMESLOT);
 
+
+    //创建内核事件表
+    m_epollfd = epoll_create(5);
+    assert(m_epollfd != -1);
+
+    //将m_listened监听套接字向内核注册表中注册为读事件
+    utils.addfd(m_epollfd, m_listenfd, false, m_LISTENTrigmode);
+    http_conn::m_epollfd = m_epollfd;
+
+    ret = socketpair(PF_UNIX, SOCK_STREAM, 0, m_pipefd);
+    assert(ret != -1);
+    utils.setnonblocking(m_pipefd[1]);
+    utils.addfd(m_epollfd, m_pipefd[0], false, 0);
+
+    utils.addsig(SIGPIPE, SIG_IGN);
+    utils.addsig(SIGALRM, utils.sig_handler, false);
+    utils.addsig(SIGTERM, utils.sig_handler, false);
+
+    //启动定时
+    alarm(TIMESLOT);
+
+    //Utils类的静态变量初始化
+    Utils::u_pipefd = m_pipefd;
+    Utils::u_epollfd = m_epollfd;
+}
+
+
+bool Websever::deal_clentdata()
+{
+    struct sockaddr_in client_address;
+    socklen_t len = sizeof(client_address);
+
+    /*如果监听描述符设置的是水平触发，则只要其缓冲区有东西就会触发，那么一次只需读一个连接就行*/
+    if(0 == m_LISTENTrigmode)
+    {
+        int connfd = accept(m_listenfd, (struct sockaddr *)&client_address, &len);
+        if(connfd < 0)
+        {
+            LOG_ERROR("%s:errno is:%d", "accept error", errno);
+            return false;            
+        }
+        //当连接数达到最大时，这个连接就不能被建立
+        if(http_conn::m_user_count >= MAX_FD)
+        {
+            utils.show_error(connfd, "Internal server busy");
+            LOG_ERROR("%s", "Internal server busy");
+            return false;
+        }
+
+        timer()
+    }
+}
+
+void Websever::eventloop()
+{
+    bool timout = false;
+    bool stop_server = false;
+    epoll_event events[MAX_EVENT_NUMBER];
+    while (!stop_server)
+    {
+        /*在eventlisten函数中已经设置好了监听描述符，并将它添加到epoll中，注册的是读事件*/
+        // -1表示无线等待，知道有事件发生
+        int number = epoll_wait(m_epollfd, events, MAX_EVENT_NUMBER, -1);
+
+        if(number < 0 && errno != EINTR)
+        {
+            LOG_ERROR("%s", "epoll failure");
+            break;
+        }
+
+        for(int i=0; i<number, i++)
+        {
+            int sockfd = events[i].data.fd;
+
+            //用户连接
+            if(sockfd == m_listenfd)
+            {
+                bool flag = deal_clentdata();
+            }
+        }
+    } 
+    
 }

@@ -2,7 +2,7 @@
 #ifndef THREADPOOL_H
 #define THREADPOOL_H
 
-#include "sql_connection_pool.h"
+#include "../sql_connection_pool/sql_connection_pool.h"
 
 template <typename T>
 class threadpool

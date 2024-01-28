@@ -1,4 +1,4 @@
-#include "config.h"
+#include "./config/config.h"
 
 
 
@@ -19,15 +19,20 @@ int main(int argc, char * argv[])
                 config.close_log, config.actor_model);
     //初始化日志
     server.log_write();
+
     //数据库连接池
     server.sql_pool();
+
     //触发模式
     server.TRIGMod();
+
     //线程池
     server.thread_pool();
     
     //监听
-    
-    
+    server.eventListen();
+
+    //运行
+    server.eventloop();
 
 }

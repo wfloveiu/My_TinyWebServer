@@ -1,5 +1,5 @@
 #include "lst_timer.h"
-
+#include "../http_conn/http_conn.h"
 
 
 sort_timer_lst::sort_timer_lst():head(NULL), tail(NULL)
@@ -200,6 +200,12 @@ void Utils::sig_handler(int sig)
     //向管道接收端发送信号
     send(u_pipefd[1], (char *)&msg, 1, 0);
     errno = save_errno;
+}
+
+void Utils::show_error(int connfd, const char * info)
+{
+    send(connfd, info, strlen(info), 0);
+    close(connfd);
 }
 //静态变量初始化
 int * Utils::u_pipefd = 0;

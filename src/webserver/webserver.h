@@ -5,19 +5,20 @@
 #include <stdlib.h>
 #include <bits/getopt_core.h>
 #include <string>
-#include "log.h"
-#include "sql_connection_pool.h"
-#include "threadpool.h"
+#include "../log/log.h"
+#include "../sql_connection_pool/sql_connection_pool.h"
+#include "../thredpool/threadpool.h"
 #include <sys/socket.h>
 #include <cassert>
 #include <netinet/in.h>
-#include "lst_timer.h"
+#include "../lst_timer/lst_timer.h"
+#include "../http_conn/http_conn.h"
 
 using namespace std;
 
 const int MAX_FD = 65536; //最大的连接数
 const int MAX_EVENT_NUMBER = 10000; //最大的事件数量
-
+const int TIMESLOT = 5; //每5s产生一次alarm信号
 class Websever
 {
 public:
@@ -39,10 +40,13 @@ public:
     //触发模式
     void TRIGMod();
 
-    //监听连接
+    //设置监听相关
     void eventListen();
-private:
 
+    //运行
+    void eventloop();
+private:
+    bool deal_clentdata();
 public:
     // 服务器运行的端口号
     int m_port;
@@ -58,11 +62,8 @@ public:
     //日志是否关闭，即是否使用日志
     int m_close_log;
     int m_actor_model;
-
-    //监听连接的套接字
-    int m_listenfd;
+ 
     /*数据库相关*/
-
     connection_pool * m_connection_pool;
     //数据库服务器的运行地址
     string m_sqlUrl;
@@ -79,8 +80,17 @@ public:
     int m_thread_num;
 
     //定时器相关
-    client_data *user_data;
+    client_data *user_timer;
     Utils utils;
+
+    //监听连接的套接字
+    int m_listenfd;
+    //epoll文件描述符
+    int m_epollfd;
+    //utils中主进程与信号接受进程之间通信
+    int m_pipefd[2];
+    http_conn *users;
+    char * m_root;
 };
 
 

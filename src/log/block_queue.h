@@ -4,7 +4,7 @@
 #ifndef BLOCK_QUEUE_H
 #define BLOCK_QUEUE_H
 
-#include "locker.h"
+#include "../lock/locker.h"
 #include <iostream>
 #include <queue>
 using namespace std;
