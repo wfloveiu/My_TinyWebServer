@@ -21,7 +21,7 @@ struct client_data
 {
     sockaddr_in address;
     int sockfd; //用户连接套接字
-    util_timer * timer;
+    util_timer * timer; //方便通过client_data直接找到timer
 };
 
 /*定时器类包括：超时时间、连接资源、定时事件
@@ -87,5 +87,7 @@ public:
     static int * u_pipefd;
     static int u_epollfd;
 };
+
+void callback_function(client_data * user_data);
 
 #endif

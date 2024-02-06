@@ -165,6 +165,26 @@ void Websever::eventListen()
     Utils::u_epollfd = m_epollfd;
 }
 
+void Websever::timer(int connfd, struct sockaddr_in client_address)
+{
+    users[connfd].init(connfd,client_address, m_root, m_CONNTrigmode, m_close_log, m_user, m_password, m_databasename);
+    
+    //初始化对应的计时器
+    util_timer * timer = new util_timer;
+    timer->user_data = &user_timer[connfd];
+    timer->callback_function = callback_function; //callback_function既可作为函数名，也可以作为函数指针
+    time_t cur_time = time(NULL);
+    timer->expire = cur_time + 3*TIMESLOT; //设置到期时间
+
+    user_timer[connfd].address = client_address;
+    user_timer[connfd].sockfd = connfd;
+    user_timer[connfd].timer = timer;
+
+    //将计时器加入到计时链表中
+    utils.m_timer_lst.add_timer(timer);
+
+
+}
 
 bool Websever::deal_clentdata()
 {
@@ -187,15 +207,122 @@ bool Websever::deal_clentdata()
             LOG_ERROR("%s", "Internal server busy");
             return false;
         }
+        //调用timer方法，为这个用户连接创建计时器，并加入到容器中
+        timer(connfd, client_address);
+    }
+    else
+    //如果是边缘触发（有新的连接请求到来时才会报告读事件），那么需要一次性将缓冲区中的连接请求读完
+    {
+        while(1)
+        {
+            int connfd = accept(m_listenfd, (struct sockaddr *)&client_address, &len);
+            if(connfd < 0)
+            {
+                LOG_ERROR("%s:errno is:%d", "accept error", errno);
+                return false;            
+            }
+            if(http_conn::m_user_count >= MAX_FD)
+            {
+                utils.show_error(connfd, "Internal server busy");
+                LOG_ERROR("%s", "Internal server busy");
+                return false;
+            }
+            timer(connfd, client_address);
+        }
+    }
+    return true;
+}
 
-        timer()
+void Websever::deal_timer(util_timer * timer, int sockfd)
+{
+    //调用回调函数，将用户连接的文件描述符删除
+    timer->callback_function(&user_timer[sockfd]);
+    if(timer)
+    {
+        //将与用户连接相关的定时器从定时器链表中删除
+        utils.m_timer_lst.delete_timer(timer);
+    }
+    LOG_INFO("close fd %d", user_timer[sockfd].sockfd);
+}
+void Websever::adjust_timer(util_timer * timer)
+{
+    time_t now = time(NULL);
+    timer->expire = now + 3*TIMESLOT;
+    utils.m_timer_lst.adjust_timer(timer);
+    LOG_INFO("%s", "adjust timer once");
+}
+bool Websever::deal_signal(bool & timeout, bool & stop_server)
+{
+    int ret = 0;
+    char signal[1024];
+    ret = recv(m_pipefd[0],signal, sizeof(signal), 0);
+    if(ret == -1 || ret == 0)
+        return false;
+    for(int i=0; i<ret; i++)
+    {
+        switch (signal[i])
+        {
+        case SIGALRM:
+            timeout = true;
+            break;
+        case SIGTERM:
+            timeout = true;
+            break;
+        default:
+            break;
+        }
+    }
+    return true;
+}
+void Websever::deal_read(int sockfd)
+{
+    util_timer * timer = user_timer[sockfd].timer;
+
+    //对于reactor，其读取请求数据是在任务线程中进行的
+    if(m_actor_model == 1)
+    {
+        if(timer)
+            adjust_timer(timer); //计时器加时
+        m_threadpool->append(users + sockfd, 0); //添加到请求队列
+
+        while(true)
+        {
+            if(users[sockfd].improv == 1) //表示数据读取完成
+            {
+                if(users[sockfd].timer_flag == 1) //timer_flag=1表示这个http连接出现问题，需要删除定时器
+                {
+                    deal_timer(timer, sockfd);
+                    users[sockfd].timer_flag = 0;
+                }
+                users[sockfd].improv = 0;
+                break;
+            }
+
+        }
+    }
+    //对于proactor，对请求数据的读取是在主线程中进行的
+    else
+    {
+        if (users[sockfd].read_once()) // 在主线程中使用read_once()函数读取接收缓冲区的请求数据
+        {
+            LOG_INFO("deal with the client(%s)", inet_ntoa(users[sockfd].get_address()->sin_addr));
+            m_threadpool->append_p(users + sockfd); //添加到请求队列
+            if (timer)
+            {
+                adjust_timer(timer);
+            }
+        }
+        else
+        {
+            deal_timer(timer, sockfd);
+        }
     }
 }
 
 void Websever::eventloop()
 {
-    bool timout = false;
-    bool stop_server = false;
+    bool timeout = false;   //
+    bool stop_server = false;  //服务器状态：打开
     epoll_event events[MAX_EVENT_NUMBER];
     while (!stop_server)
     {
@@ -209,15 +336,45 @@ void Websever::eventloop()
             break;
         }
 
-        for(int i=0; i<number, i++)
+        for(int i=0; i<number; i++)
         {
             int sockfd = events[i].data.fd;
 
-            //用户连接
+            //用户连接请求
             if(sockfd == m_listenfd)
             {
                 bool flag = deal_clentdata();
+                continue;
             }
+            //需要关闭已建立的连接
+            else if(events[i].events & (EPOLLRDHUP || EPOLLHUP || EPOLLERR))
+            {
+                util_timer * timer = user_timer[sockfd].timer;
+                deal_timer(timer, sockfd);
+            }
+            //倒计时到时间后通过信号在进程间传递
+            else if ((sockfd == m_pipefd[0]) && (events[i].events == EPOLLIN))
+            {
+                bool flag = deal_signal(timeout, stop_server);
+                if (false == flag)
+                    LOG_ERROR("%s", "dealclientdata failure");
+            }
+            // 不是上边的情况，那就说明时间发生在已经建立连接的客户连接上，处理客户数据就行
+            //处理客户连接上接收到的数据
+            else if(events[i].events & EPOLLIN)
+            {
+                deal_read(sockfd);
+            }
+            else if(events[i].events & EPOLLOUT)
+            {
+                deal_write(sockfd);
+            }
+        }
+        if(timeout) //倒计时结束，处理定时器
+        {
+            utils.timer_handler();
+            LOG_INFO("%s", "timer tick");
+            timeout = false;
         }
     } 
     

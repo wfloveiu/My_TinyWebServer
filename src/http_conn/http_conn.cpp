@@ -64,3 +64,49 @@ void http_conn::init()
     memset(m_write_buf, '\0', WRITE_BUFFER_SIZE);
     memset(m_real_file, '\0', FILENAME_LEN);
 }
+
+bool http_conn::read_once()
+{
+    if(m_read_idx >= READ_BUFFER_SIZE)
+        return false;
+    int read_bytes = 0;
+    // LT触发
+    if(m_TRIGMode == 0)
+    {
+        read_bytes = recv(m_sockfd, m_read_buf+m_read_idx, READ_BUFFER_SIZE-m_read_idx, 0);
+        m_read_idx += read_bytes;
+
+        if(read_bytes<=0)
+            return false;
+        return true;
+    }
+    //ET非阻塞模式
+    else
+    {
+        while(1)
+        {
+            //疑问：m_read_idx下标可能会越界，如何解决
+            read_bytes = recv(m_sockfd, m_read_buf+m_read_idx, READ_BUFFER_SIZE-m_read_idx, 0);
+            if(read_bytes == -1)
+            {
+                if(errno == EWOULDBLOCK || errno == EAGAIN) // socket非阻塞状态下，缓冲区中没有数据时，会返回这两种状态码
+                    break;
+                return false;
+            }
+            if(read_bytes == 0) //对端关闭
+                return false;
+            m_read_idx += read_bytes;
+        }
+        return true;
+    }
+}
+
+void http_conn::process()
+{
+
+}
+
+bool http_conn::write()
+{
+    
+}

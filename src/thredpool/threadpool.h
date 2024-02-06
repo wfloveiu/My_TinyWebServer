@@ -13,6 +13,8 @@ public:
     ~threadpool();
     //添加请求
     bool append(T * request, int staete);
+
+    bool append_p(T * request);
 private:
     void * worker(void *arg);
     //真正的执行请求的函数
@@ -91,6 +93,27 @@ bool threadpool<T>::append(T * request, int state)
     return true;
 }
 
+
+template <typename T>
+bool threadpool<T>::append_p(T * request)
+{
+    m_queuelock.lock();
+    if(m_queue.size() >= m_max_request)
+    {
+        m_queuelock.unlock();
+        return false;
+    }
+    // request->state = state;
+    /*对于proactor，在任务线程中，不需要区分读还是写任务，因为读缓冲区和写缓冲区都是在夫进程中完成的*/
+    m_queue.push_back(request);
+    m_queuelock.unlock();
+
+    // 通过信号量提醒有任务要处理
+    m_sem.post();
+    return true;
+}
+
+
 template <typename T>
 void * threadpool<T>::worker(void * arg)
 {
@@ -104,6 +127,56 @@ void * threadpool<T>::worker(void * arg)
 template <typename T>
 void threadpool<T>::run()
 {
-    
+    while(true)
+    {
+        m_sem.wait(); //信号量等待，非零说明队列中有任务要处理
+        m_queuelock.lock();
+        if(m_queue.empty())
+        {
+            m_queuelock.unlock();
+            continue;
+        }
+        T * request = m_queue.front();
+        m_queue.pop_front();
+        m_queuelock.unlock();
+
+        if(!request)
+            continue;
+
+        //reactor模式
+        if(m_actor_model == 1)
+        {
+            if(request->m_state == 0)
+            {
+                if(request->read_once())
+                {
+                    request->improv = 1;
+                    connectionRAII mysqlcon(&request->mysql, m_connection_pool); //为连接申请数据库连接
+                    request->process(); //处理请求
+                }
+                不知道为什么;
+                else
+                {
+                    request->improv = 1;
+                    request->timer_flag = 1;
+                }
+            }
+            else
+            {
+                if(request->())
+                    request->improv = 1;
+                else
+                {
+                    request->improv = 1;
+                    request->timer_flag = 1;
+                }
+            }
+        }
+        else
+        {
+            connectionRAII mysqlcon(&request->mysql, m_connection_pool); //为连接申请数据库连接
+            request->process(); //处理请求
+        }
+    }
 }
 #endif

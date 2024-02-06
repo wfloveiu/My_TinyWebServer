@@ -18,9 +18,9 @@ public:
     static int m_epollfd;
     //这个http连接使用的数据库连接
     MYSQL *mysql;
-    //连接状态，0表示需要做读操作，1表示写操作
-    int m_state;
-    int timer_flag;
+   
+    int m_state;   //reactor下在任务线程中对于要处理任务的标识，0表示处理读操作，1表示处理写操作
+    int timer_flag; //读取数据失败时，将次位设置为1，从而在主线程中删除该连接所有相关
     int improv;
     enum METHOD  //枚举类型，请求方法
     {
@@ -67,6 +67,16 @@ public:
 
     void init(int sockfd, const sockaddr_in &addr, char *, int, int, string user, string passwd, string sqlname);
 
+    bool read_once();
+
+    void process();
+    //响应写回缓冲区
+    bool write();
+
+    sockaddr_in * get_address()
+    {
+        return & m_address;
+    }
 private:
     void init();
 private:
@@ -85,7 +95,7 @@ private:
 
     /*读取请求报文相关变量*/
     char m_read_buf[READ_BUFFER_SIZE];  //读缓冲区
-    long m_read_idx;    //读缓冲区中最后一个字节的数据的下一个位置下标
+    long m_read_idx;    //读缓冲区中第一个未被填充字符的下标
     
 
     /*解析请求报文相关变量*/

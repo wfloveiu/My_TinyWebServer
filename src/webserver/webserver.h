@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <bits/getopt_core.h>
 #include <string>
+#include <arpa/inet.h>
 #include "../log/log.h"
 #include "../sql_connection_pool/sql_connection_pool.h"
 #include "../thredpool/threadpool.h"
@@ -27,7 +28,6 @@ public:
     void init(int port, string user, string password, string databasename, int log_write,
               int opt_linger, int trigmod, int sql_num, int thread_num, int close_log, int actor_model);
     
-    
     // 初始化日志类
     void log_write();
 
@@ -45,8 +45,16 @@ public:
 
     //运行
     void eventloop();
+    //将连接添加到定时器中
+    void timer(int connfd, struct sockaddr_in client_address);
 private:
     bool deal_clentdata();
+    void deal_timer(util_timer * timer, int sockfd);
+    bool deal_signal(bool & timeout, bool & stop_server);
+    void deal_read(int sockfd);
+    void deal_write(int sockfd);
+    //调整连接的到期时间
+    void adjust_timer(util_timer * timer);
 public:
     // 服务器运行的端口号
     int m_port;
@@ -79,18 +87,17 @@ public:
     //线程池中的最大连接数
     int m_thread_num;
 
-    //定时器相关
+    /*定时器相关*/
     client_data *user_timer;
     Utils utils;
 
-    //监听连接的套接字
-    int m_listenfd;
-    //epoll文件描述符
-    int m_epollfd;
-    //utils中主进程与信号接受进程之间通信
-    int m_pipefd[2];
-    http_conn *users;
-    char * m_root;
+    
+    int m_listenfd;  //监听连接的套接字
+    int m_epollfd;  //epoll文件描述符
+    
+    int m_pipefd[2];  //utils中主进程与信号接受进程之间通信
+    http_conn *users; //记录已建立连接的文件描述符
+    char * m_root; 
 };
 
 
