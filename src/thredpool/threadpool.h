@@ -11,10 +11,10 @@ public:
 /*thread_number是线程池中线程的数量，max_requests是请求队列中最多允许的、等待处理的请求的数量*/
     threadpool(int actor_model, connection_pool * connpool, int thread_num = 8, int max_request = 10000);
     ~threadpool();
-    //添加请求
-    bool append(T * request, int staete);
+    
+    bool append(T * request, int staete); //reactor模式下将请求加入队列
 
-    bool append_p(T * request);
+    bool append_p(T * request);  //proactor模式下将请求加入队列
 private:
     void * worker(void *arg);
     //真正的执行请求的函数
@@ -154,7 +154,6 @@ void threadpool<T>::run()
                     connectionRAII mysqlcon(&request->mysql, m_connection_pool); //为连接申请数据库连接
                     request->process(); //处理请求
                 }
-                不知道为什么;
                 else
                 {
                     request->improv = 1;

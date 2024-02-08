@@ -318,7 +318,10 @@ void Websever::deal_read(int sockfd)
         }
     }
 }
-
+void Websever::deal_write(int sockfd)
+{
+    
+}
 void Websever::eventloop()
 {
     bool timeout = false;   //

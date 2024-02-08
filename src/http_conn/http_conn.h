@@ -79,6 +79,11 @@ public:
     }
 private:
     void init();
+    HTTP_CODE process_read();
+    LINE_STATUS parse_line();
+    char * getline(){return m_read_buf + m_start_line;}
+    http_conn::HTTP_CODE analyze_request_line(char * text); //分析处理请求行内容
+    http_conn::HTTP_CODE analyze_request_header(char * text); //分析处理请求头内容
 private:
     //http连接的套机口
     int m_sockfd; 
@@ -99,10 +104,10 @@ private:
     
 
     /*解析请求报文相关变量*/
-    CHECK_STATE m_check_state;
+    CHECK_STATE m_check_state;  //解析报文到哪一个阶段了，是到请求行？请求头？还是请求体
     METHOD m_method;    //请求方法
     long m_check_idx;   //读缓冲区中解析到哪个位置
-    long m_start_line;
+    long m_start_line;  //将请求报文写入buffer后，需要分别解析出每一行，m_start_line就表示每一行的起始位置偏移
     /*请求报文中的6个变量*/
     char m_real_file[FILENAME_LEN];
     char *m_url;
