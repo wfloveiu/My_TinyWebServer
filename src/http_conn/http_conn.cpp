@@ -20,6 +20,38 @@ map<string, string> users;
 int http_conn::m_user_count = 0;
 int http_conn::m_epollfd = -1;
 
+//将事件重置为EPOLLONESHOT
+void modfd(int epollfd, int fd, int ev, int TRIGMode)
+{
+    epoll_event event;
+    event.data.fd = fd;
+
+    if (1 == TRIGMode)
+        event.events = ev | EPOLLET | EPOLLONESHOT | EPOLLRDHUP;
+    else
+        event.events = ev | EPOLLONESHOT | EPOLLRDHUP;
+
+    epoll_ctl(epollfd, EPOLL_CTL_MOD, fd, &event);
+}
+
+void http_conn::init_mysql(connection_pool * connPoll)
+{
+    MYSQL * mysql  = NULL;
+    connectionRAII mysqlcon(&mysql, connPoll);
+
+    //检索user表中的username和password
+    if(mysql_query(mysql, "SELECT username,passwd FROM user"))
+    {
+        LOG_ERROR("SELECT error:%s\n", mysql_error(mysql));
+    }
+    MYSQL_RES * result = mysql_store_result(mysql);
+    while(MYSQL_ROW row = mysql_fetch_row(result))
+    {
+        string temp1(row[0]);
+        string temp2(row[1]);
+        users[temp1] = temp2;
+    }
+}
 void http_conn::init(int sockfd, const sockaddr_in &addr, char *root, int TRIGMod, int close_log, string user, string passwd, string sqlname)
 {
     m_sockfd = sockfd;
@@ -224,13 +256,142 @@ http_conn::HTTP_CODE http_conn::analyze_request_header(char * text)
     return NO_REQUEST;
 }
 
+//分析完请求报文后，对不同的请求做出对应的处理
+http_conn::HTTP_CODE http_conn::do_request()
+{
+    strcpy(m_real_file, doc_root);
+    int root_len = strlen(doc_root);
+    //将浏览器中的网址抽象为ip:port/xxx,m_url就是/xxx
+    const char * p = strrchr(m_url, '/');
+    
+    /*
+        项目中解析后的m_url有8种情况
+        1. / 
+            GET请求，跳转到judge.html，即欢迎访问页面
+        2. /0
+            POST请求，跳转到register.html，即注册页面
+        3. /1
+            POST请求，跳转到log.html，即登录页面
+        4. /2CGISQL.cgi
+            POST请求，进行登录校验,验证成功跳转到welcome.html，即资源请求成功页面,验证失败跳转到logError.html，即登录失败页面
+        5. /3CGISQL.cgi
+            POST请求，进行注册校验,注册成功跳转到log.html，即登录页面,注册失败跳转到registerError.html，即注册失败页面
+        6. /5
+            POST请求，跳转到picture.html，即图片请求页面
+        7. /6
+            POST请求，跳转到video.html，即视频请求页面
+        8. /7
+            POST请求，跳转到fans.html，即关注页面
+    */
+    if(cgi == 1 && ((*(p+1) == '2') || (*(p+1) == '3')))
+    {
+        //将用户名和密码提取出来
+        //user=123&passwd=123
+        char name[100], password[100];
+        int i;
+        for(i=5;m_string[i]!='&';i++)
+            name[i-5] = m_string[i];
+        name[i-5] = '\0';
+        for(int j = i+8; m_string[j]!='\0';j++)
+            password[j-i-8] = m_string[j];
+        
+        if(*(p+1) == '3')
+        {
+            char * sql_insert = (char *)malloc(sizeof(char) * 200);
+            sprintf(sql_insert, "INSERT INTO user(username, passwd) VALUES('%s', '%s')", name, password);
+            if(users.find(name) == users.end())
+            {
+                m_lock.lock();
+                int res = mysql_query(mysql, sql_insert);
+                users.insert(pair<string,string>(name, password));
+                m_lock.unlock();
+
+                if(!res)
+                    strcpy(m_url, "/log.html");
+                else   
+                    strcpy(m_url, "/registerError.html");
+            }
+            else   
+                strcpy(m_url, "/registerError.html");
+        }
+        else if(*(p+1) == '2')
+        {
+            if(users.find(name)!=users.end() && users[name]==password)
+                strcpy(m_url, "/welcome.html");
+            else    
+                strcpy(m_url, "/logError.html");
+        }
+        strncpy(m_real_file+root_len, m_url, strlen(m_url));
+    }
+
+    if(*(p+1) == '0')
+    {
+        char * temp = (char *)malloc(sizeof(char) * 200);
+        strcpy(temp, "/register.html");
+        strncpy(m_real_file+root_len,temp, strlen(temp));
+        free(temp);
+    }
+    else if(*(p+1) == '1')
+    {
+        char * temp = (char *)malloc(sizeof(char) * 200);
+        strcpy(temp, "/log.html");
+        strncpy(m_real_file+root_len,temp, strlen(temp));
+        free(temp);
+    }
+    else if(*(p+1) == '5')
+    {
+        char * temp = (char *)malloc(sizeof(char) * 200);
+        strcpy(temp, "/picture.html");
+        strncpy(m_real_file+root_len,temp, strlen(temp));
+        free(temp);
+    }
+    else if(*(p+1) == '6')
+    {
+        char * temp = (char *)malloc(sizeof(char) * 200);
+        strcpy(temp, "/video.html");
+        strncpy(m_real_file+root_len,temp, strlen(temp));
+        free(temp);
+    }
+    else if(*(p+1) == '7')
+    {
+        char * temp = (char *)malloc(sizeof(char) * 200);
+        strcpy(temp, "/fans.html");
+        strncpy(m_real_file+root_len,temp, strlen(temp));
+        free(temp);
+    }
+    else
+        strncpy(m_real_file+root_len, m_url, strlen(m_url)); //m_url为"/judge.html"时
+
+    if(stat(m_real_file, &m_file_stat) < 0)
+        return NO_RESOURCE; //文件不存在
+    if(!(m_file_stat.st_mode & S_IROTH)) //S_IROTH表示其它用户具有访问权限
+        return FORBIDDEN_REQUEST;
+    if(S_ISDIR(m_file_stat.st_mode)) //检查是否是一个目录
+        return BAD_REQUEST;
+
+    int fd = open(m_real_file, O_RDONLY); //只读打开文件
+    m_file_address = (char *)mmap(NULL, m_file_stat.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
+    close(fd);
+    return FILE_REQUEST;
+}
+
+http_conn::HTTP_CODE http_conn::analyze_content(char *text)
+{
+    if(m_read_idx >= m_content_length + m_check_idx) //判断请求体是否完整
+    {
+        text[m_content_length] = '\0';
+        m_string = text;
+        return GET_REQUEST;
+    }
+    return NO_REQUEST;
+}
 http_conn::HTTP_CODE http_conn::process_read()
 {
     LINE_STATUS line_status = LINE_OK;
     HTTP_CODE ret = NO_REQUEST;//NO_REQUEST表示请求未处理完
     char *text = 0;
 
-    while((line_status = parse_line()) == LINE_OK)
+    while( (m_check_state == CHECK_STATE_CONTENT && line_status == LINE_OK) || (line_status = parse_line()) == LINE_OK)
     {
         text = getline();
         m_start_line = m_check_idx; //在parse_line中找到一行后，m_check_idx指向下一行的起始位置，因此要修改m_start_line
@@ -247,17 +408,69 @@ http_conn::HTTP_CODE http_conn::process_read()
         }
         case CHECK_STATE_HEADER:
         {
-           ret = analyze_request_header(text);
-        }    
-        
-        default:
+            ret = analyze_request_header(text);
+            if(ret == BAD_REQUEST)
+                return BAD_REQUEST;
+            else if(ret == GET_REQUEST)
+                return  do_request();
             break;
+        }    
+        case CHECK_STATE_CONTENT:
+        {
+            ret = analyze_content(text);
+            if(ret == GET_REQUEST)
+                return do_request(); 
+            line_status = LINE_OPEN;
+            break;
+
+        }
+        default:
+            return INTERNAL_ERROR;
         }
     }
 }
+
+bool http_conn::add_response(const char * format, ...)
+{
+    if(m_write_idx >= WRITE_BUFFER_SIZE)
+        return false;
+    va_list arg_list;
+    va_start(arg_list, format);
+    int len = vsnprintf(m_write_buf+m_write_idx, WRITE_BUFFER_SIZE-1-m_write_idx, format, arg_list);
+}
+
+bool http_conn::add_status_line(int status, const char * title)
+{
+
+}
+
+bool http_conn::process_write(HTTP_CODE read_ret)
+{
+    switch (read_ret)
+    {
+    case INTERNAL_ERROR:
+        
+        break;
+    
+    default:
+        break;
+    }
+}
+
 void http_conn::process()
 {
     HTTP_CODE read_ret = process_read();
+    //NO_REQUEST，表示请求不完整，需要继续接收请求数据
+    if(read_ret == NO_REQUEST)
+    {
+        modfd(m_epollfd, m_sockfd, EPOLLIN, m_TRIGMode);
+        return;
+    }
+    bool write_ret = process_write(read_ret);
+    if(!write_ret)
+        close_conn();
+    modfd(m_epollfd, m_sockfd, EPOLLOUT, m_TRIGMode);   
+    
 }
 
 bool http_conn::write()

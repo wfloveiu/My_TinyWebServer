@@ -92,6 +92,7 @@ void Websever::sql_pool()
     m_connection_pool->init(m_sqlUrl, m_user, m_password, m_databasename, m_sqlPort, m_sql_num, m_close_log);
 
     //初始化数据库读取表
+    users->init_mysql(m_connection_pool);
 }
 
 void Websever::thread_pool()
@@ -320,7 +321,7 @@ void Websever::deal_read(int sockfd)
 }
 void Websever::deal_write(int sockfd)
 {
-    
+
 }
 void Websever::eventloop()
 {

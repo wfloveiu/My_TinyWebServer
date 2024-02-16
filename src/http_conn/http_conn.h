@@ -1,9 +1,30 @@
 #ifndef HTTP_CONN_H
 #define HTTP_CONN_H
 
+#include <unistd.h>
+#include <signal.h>
+#include <sys/types.h>
+#include <sys/epoll.h>
+#include <fcntl.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <assert.h>
+#include <sys/stat.h>
+#include <string.h>
+#include <pthread.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <sys/mman.h>
+#include <stdarg.h>
+#include <errno.h>
+#include <sys/wait.h>
+#include <sys/uio.h>
+
 #include "../log/log.h"
 #include "../lock/locker.h"
 #include "../lst_timer/lst_timer.h"
+#include "../sql_connection_pool/sql_connection_pool.h"
 #include <map>
 
 class http_conn
@@ -47,9 +68,9 @@ public:
         NO_REQUEST, // 报文处理还没结束，需要继续处理请求报文数据
         GET_REQUEST,// 获得了完整的HTTP请求
         BAD_REQUEST, // HTTP请求报文有语法错误
-        NO_RESOURCE,
-        FORBIDDEN_REQUEST,
-        FILE_REQUEST,
+        NO_RESOURCE, // 请求的资源不存在
+        FORBIDDEN_REQUEST, // 请求的资源不允许被访问
+        FILE_REQUEST, // 
         INTERNAL_ERROR,
         CLOSED_CONNECTION
     };
@@ -58,7 +79,7 @@ public:
     {
         LINE_OK = 0,
         LINE_BAD,
-        LINE_OPEN
+        LINE_OPEN  //读取的行不完整
     }; 
 
 public:
@@ -66,7 +87,7 @@ public:
     ~http_conn();
 
     void init(int sockfd, const sockaddr_in &addr, char *, int, int, string user, string passwd, string sqlname);
-
+    void init_mysql(connection_pool * connPool);
     bool read_once();
 
     void process();
@@ -82,8 +103,13 @@ private:
     HTTP_CODE process_read();
     LINE_STATUS parse_line();
     char * getline(){return m_read_buf + m_start_line;}
-    http_conn::HTTP_CODE analyze_request_line(char * text); //分析处理请求行内容
-    http_conn::HTTP_CODE analyze_request_header(char * text); //分析处理请求头内容
+    HTTP_CODE analyze_request_line(char * text); //分析处理请求行内容
+    HTTP_CODE analyze_request_header(char * text); //分析处理请求头内容
+    HTTP_CODE do_request();//分析完请求报文后，对不同的请求做出对应的处理
+    HTTP_CODE analyze_content(char *text);
+    bool process_write(HTTP_CODE read_ret); 
+    bool add_response(const char * format, ...); // 将响应报文的内容输出到写缓冲区中
+    bool add_status_line(int status, const char * title); //生成响应报文的状态行
 private:
     //http连接的套机口
     int m_sockfd; 
