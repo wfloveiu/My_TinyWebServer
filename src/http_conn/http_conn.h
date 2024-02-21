@@ -98,6 +98,8 @@ public:
     {
         return & m_address;
     }
+
+    void close_conn(bool real_close = true);
 private:
     void init();
     HTTP_CODE process_read();
@@ -110,6 +112,12 @@ private:
     bool process_write(HTTP_CODE read_ret); 
     bool add_response(const char * format, ...); // 将响应报文的内容输出到写缓冲区中
     bool add_status_line(int status, const char * title); //生成响应报文的状态行
+    bool add_header(int conten_len);  //生成响应头
+    bool add_content(const char * content);
+    bool add_content_length(int conten_len);
+    bool add_linger();
+    bool add_blank_line();
+    void unmap();
 private:
     //http连接的套机口
     int m_sockfd; 
@@ -143,7 +151,7 @@ private:
     bool m_linger;     //浏览器连接状态，true为保持连接
 
     //暂时未定义
-    char *m_file_address;
+    char *m_file_address; //文件mmap后映射到内存空间的首地址
     struct stat m_file_stat;
     struct iovec m_iv[2];
     int m_iv_count;

@@ -321,6 +321,42 @@ void Websever::deal_read(int sockfd)
 }
 void Websever::deal_write(int sockfd)
 {
+    util_timer * timer = user_timer[sockfd].timer;
+
+    if(m_actor_model == 1)
+    {
+        if(timer)
+            adjust_timer(timer);
+        m_threadpool->append(users+sockfd, 1); //添加到请求队列
+
+        while(true)
+        {
+            if(users[sockfd].improv == 1)
+            {
+                if(users[sockfd].timer_flag == 1)
+                {
+                    deal_timer(timer, sockfd);
+                    users[sockfd].timer_flag = 0;
+                }
+            }
+            users[sockfd].improv = 0;
+            break;
+        }
+    }
+    else
+    {
+        if(users[sockfd].write())
+        {
+            LOG_INFO("send data to the client(%s)", inet_ntoa(users[sockfd].get_address()->sin_addr));
+            if(timer)
+                adjust_timer(timer);
+            
+        }
+        else
+        {
+            deal_timer(timer, sockfd);
+        }
+    }
 
 }
 void Websever::eventloop()

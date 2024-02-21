@@ -146,7 +146,7 @@ void threadpool<T>::run()
         //reactor模式
         if(m_actor_model == 1)
         {
-            if(request->m_state == 0)
+            if(request->m_state == 0) //要处理的操作是读操作
             {
                 if(request->read_once())
                 {
@@ -160,9 +160,9 @@ void threadpool<T>::run()
                     request->timer_flag = 1;
                 }
             }
-            else
+            else //要处理的操作是写操作
             {
-                if(request->())
+                if(request->write())
                     request->improv = 1;
                 else
                 {
