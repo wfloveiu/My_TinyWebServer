@@ -9,7 +9,7 @@ class Config
 {
 public:
     Config();
-    ~Config();
+    // ~Config();
     void parse_arg(int argc, char * argv[]);
 public:
     // 服务器监听的端口号

@@ -16,7 +16,7 @@ public:
 
     bool append_p(T * request);  //proactor模式下将请求加入队列
 private:
-    void * worker(void *arg);
+    static void * worker(void *arg);
     //真正的执行请求的函数
     void run();
 private:
@@ -84,7 +84,7 @@ bool threadpool<T>::append(T * request, int state)
         m_queuelock.unlock();
         return false;
     }
-    request->state = state;
+    request->m_state = state;
     m_queue.push_back(request);
     m_queuelock.unlock();
 

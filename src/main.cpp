@@ -5,9 +5,9 @@
 int main(int argc, char * argv[])
 {
 
-    string user = "";
-    string password = "";
-    string databasename = "";
+    string user = "root";
+    string password = "wf140039";
+    string databasename = "tiny_httpserver_db";
 
     Config config;//默认构造参数
     config.parse_arg(argc, argv); //按照命令行中传入的参数更改

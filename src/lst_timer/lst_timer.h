@@ -62,8 +62,8 @@ private:
 class Utils
 {
 public:
-    Utils();
-    ~Utils();
+    // Utils();
+    // ~Utils();
     void init(int timeslot);
     //对文件描述符设置非阻塞
     int setnonblocking(int fd);

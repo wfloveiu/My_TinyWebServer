@@ -83,8 +83,8 @@ public:
     }; 
 
 public:
-    http_conn();
-    ~http_conn();
+    // http_conn();
+    // ~http_conn();
 
     void init(int sockfd, const sockaddr_in &addr, char *, int, int, string user, string passwd, string sqlname);
     void init_mysql(connection_pool * connPool);
@@ -104,7 +104,7 @@ private:
     void init();
     HTTP_CODE process_read();
     LINE_STATUS parse_line();
-    char * getline(){return m_read_buf + m_start_line;}
+    char * getline(){return m_read_buf + m_start_line;};
     HTTP_CODE analyze_request_line(char * text); //分析处理请求行内容
     HTTP_CODE analyze_request_header(char * text); //分析处理请求头内容
     HTTP_CODE do_request();//分析完请求报文后，对不同的请求做出对应的处理

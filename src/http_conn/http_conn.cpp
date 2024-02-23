@@ -143,7 +143,7 @@ bool http_conn::read_once()
 http_conn::LINE_STATUS http_conn::parse_line()
 {
     char tmp;
-    for(;m_check_idx < m_read_idx; m_check_idx++)
+    for(;m_check_idx < m_read_idx; ++m_check_idx)
     {
         tmp = m_read_buf[m_check_idx];
         if(tmp == '\r')
@@ -171,22 +171,26 @@ http_conn::HTTP_CODE http_conn::analyze_request_line(char * text)
     if(!m_url)
         return BAD_REQUEST;
     *m_url++ = '\0';  //字符串分割
-    m_url += strspn(m_url," \t"); //检索字符串 str1 中第一个不在字符串 str2 中出现的字符下标。可能出现连续的空格或者制表符
+    
 
     char * method = text;
-    if(strcasecmp(text,"GET") == 0)
+    if(strcasecmp(method,"GET") == 0)
         m_method = GET;
-    else if(strcasecmp(text,"POST") == 0)
+    else if(strcasecmp(method,"POST") == 0)
         m_method = POST,cgi = 1;
     else
         return BAD_REQUEST; //仅仅支持get和post
 
-    
+    m_url += strspn(m_url," \t"); //检索字符串 str1 中第一个不在字符串 str2 中出现的字符下标。可能出现连续的空格或者制表符
     m_version = strpbrk(m_url, " \t");
     if(!m_version)
         return BAD_REQUEST;
     *m_version++ = '\0';
     m_version+=strspn(m_version, " \t");
+
+    if (strcasecmp(m_version, "HTTP/1.1") != 0)
+        return BAD_REQUEST;
+
     /*http://IP地址:端口号/.....*/
     if(strncasecmp(m_url, "http://", 7) == 0)
     {
@@ -198,16 +202,17 @@ http_conn::HTTP_CODE http_conn::analyze_request_line(char * text)
         m_url += 8;
         m_url = strchr(m_url,'/'); 
     }
-    if(!m_url)
+    if(!m_url || m_url[0] != '/')
         return BAD_REQUEST;
     /*
     如果端口号后只有'/'，未定位到具体文件，则默认是judge.html
     */
     if(strlen(m_url) == 1)
+    {
         strcat(m_url, "judge.html");
+    }
     
-    if (strcasecmp(m_version, "HTTP/1.1") != 0)
-        return BAD_REQUEST;
+
 
     m_check_state = CHECK_STATE_HEADER;
     return NO_REQUEST;
@@ -246,9 +251,9 @@ http_conn::HTTP_CODE http_conn::analyze_request_header(char * text)
     {
         text+=15;
         text+=strspn(text, " \t");
-        m_content_length = atoi(text);
+        m_content_length = atol(text);
     }
-    else if(strncasecmp(text, "HOST:", 5) == 0)
+    else if(strncasecmp(text, "Host:", 5) == 0)
     {
         text+=5;
         text+=strspn(text, " \t");
@@ -267,6 +272,7 @@ http_conn::HTTP_CODE http_conn::do_request()
     strcpy(m_real_file, doc_root);
     int root_len = strlen(doc_root);
     //将浏览器中的网址抽象为ip:port/xxx,m_url就是/xxx
+    // printf("m_url:%s\n", m_url);
     const char * p = strrchr(m_url, '/');
     
     /*
@@ -291,15 +297,19 @@ http_conn::HTTP_CODE http_conn::do_request()
     if(cgi == 1 && ((*(p+1) == '2') || (*(p+1) == '3')))
     {
         //将用户名和密码提取出来
-        //user=123&passwd=123
+        //user=123&password=123
         char name[100], password[100];
         int i;
         for(i=5;m_string[i]!='&';i++)
             name[i-5] = m_string[i];
         name[i-5] = '\0';
-        for(int j = i+8; m_string[j]!='\0';j++)
-            password[j-i-8] = m_string[j];
+
+        i+=10;
+        for(int j = i; m_string[j]!='\0';j++)
+            password[j-i] = m_string[j];
         
+        // printf("%s %s\n",name, password);
+
         if(*(p+1) == '3')
         {
             char * sql_insert = (char *)malloc(sizeof(char) * 200);
@@ -325,6 +335,7 @@ http_conn::HTTP_CODE http_conn::do_request()
                 strcpy(m_url, "/welcome.html");
             else    
                 strcpy(m_url, "/logError.html");
+            
         }
         strncpy(m_real_file+root_len, m_url, strlen(m_url));
     }
@@ -365,7 +376,10 @@ http_conn::HTTP_CODE http_conn::do_request()
         free(temp);
     }
     else
+    {
         strncpy(m_real_file+root_len, m_url, strlen(m_url)); //m_url为"/judge.html"时
+        // printf("m_real_file:%s\n",m_real_file);
+    }    
 
     if(stat(m_real_file, &m_file_stat) < 0)
         return NO_RESOURCE; //文件不存在
@@ -395,8 +409,7 @@ http_conn::HTTP_CODE http_conn::process_read()
     LINE_STATUS line_status = LINE_OK;
     HTTP_CODE ret = NO_REQUEST;//NO_REQUEST表示请求未处理完
     char *text = 0;
-
-    while( (m_check_state == CHECK_STATE_CONTENT && line_status == LINE_OK) || (line_status = parse_line()) == LINE_OK)
+    while((m_check_state == CHECK_STATE_CONTENT && line_status == LINE_OK) || (line_status = parse_line()) == LINE_OK)
     {
         text = getline();
         m_start_line = m_check_idx; //在parse_line中找到一行后，m_check_idx指向下一行的起始位置，因此要修改m_start_line
@@ -512,8 +525,9 @@ bool http_conn::process_write(HTTP_CODE read_ret)
     }
     case FILE_REQUEST:
     {
+
         add_status_line(200, ok_200_title);
-        if(!m_file_stat.st_size)
+        if(m_file_stat.st_size)
         {
             add_header(m_file_stat.st_size);
             //第一个iovec指针指向响应报文缓冲区
@@ -525,6 +539,7 @@ bool http_conn::process_write(HTTP_CODE read_ret)
 
             m_iv_count = 2;
             byte_to_send = m_write_idx + m_file_stat.st_size;
+            // printf("byte_to_send: %d\n", byte_to_send);
             return true;
         }
         else
@@ -569,16 +584,27 @@ void http_conn::unmap()
 bool http_conn::write()
 {
     int temp = 0;
-    
+
+    if (byte_to_send == 0)
+    {
+        modfd(m_epollfd, m_sockfd, EPOLLIN, m_TRIGMode);
+        init();
+        return true;
+    }
+
+
     while(1)
     {
         temp = writev(m_sockfd, m_iv, m_iv_count);
+        // printf("the number of write: %d\n", temp);
         if(temp < 0)
         {
+            // modfd(m_epollfd, m_sockfd, EPOLLOUT, m_TRIGMode);
+            // return true;
             // 判断缓冲区是否满了，如果eagain，则是缓冲区满了，注册写事件，等待下一次触发，因此在此期间无法立即接收统同一用户的下一个请求
             if(errno == EAGAIN)
             {
-                modfd(m_epollfd, m_sockfd, EPOLLOUT, 0);
+                modfd(m_epollfd, m_sockfd, EPOLLOUT, m_TRIGMode);
                 return true;
             }
             else
@@ -593,14 +619,14 @@ bool http_conn::write()
         // 每次调用writev成功后，都需要根据成功写入的字节数，调整iovec的io_base和io_len
         if(byte_have_send < m_iv[0].iov_len)
         {
-            m_iv[0].iov_base += temp;
-            m_iv[0].iov_len -= temp;
+            m_iv[0].iov_base = m_write_buf+byte_have_send;
+            m_iv[0].iov_len -= byte_have_send;
         }
         else
         {
             m_iv[0].iov_len = 0;
-            m_iv[1].iov_base += byte_have_send-m_write_idx;
-            m_iv[1].iov_len -= byte_to_send;
+            m_iv[1].iov_base = m_file_address+byte_have_send-m_write_idx;
+            m_iv[1].iov_len = byte_to_send;
         }
         //数据完成发送
         if(byte_to_send <= 0)

@@ -30,13 +30,13 @@ bool Log::init(const char * file_name, int close_log, int log_buf_size, int spli
     m_log_buf_size = log_buf_size;
     m_buf = new char[m_log_buf_size];
     memset(m_buf, '\0', m_log_buf_size);
-
+    m_split_lines = split_lines;
     // 处理写入日志的文件名
     time_t t = time(NULL);
     struct tm *sys_tm = localtime(&t); //获取本地时间，转换成tm类型
     struct tm my_tm = *sys_tm;
 
-    const char *p = strchr(file_name, '/'); //获取最后一个'/'的位置
+    const char *p = strrchr(file_name, '/'); //获取最后一个'/'的位置
     char log_full_name[256] = {0};
 
     if(p==NULL) //说明参数file_name中没有'/',则file_name就是文件名
@@ -48,7 +48,8 @@ bool Log::init(const char * file_name, int close_log, int log_buf_size, int spli
         strcpy(log_name, p+1); //复制文件名,从p的下一个位置开始复制
         strncpy(log_dirname, file_name, p-file_name+1);  //复制文件路径
         // 形如/home/../logname
-        snprintf(log_full_name, 256, "%s_%d_%02d_%02d_%s", log_dirname, my_tm.tm_year+1900, my_tm.tm_mon+1, my_tm.tm_mday, log_name);
+        snprintf(log_full_name, 256, "%s%d_%02d_%02d_%s", log_dirname, my_tm.tm_year+1900, my_tm.tm_mon+1, my_tm.tm_mday, log_name);
+
     }   
 
     m_today = my_tm.tm_mday;
@@ -58,6 +59,7 @@ bool Log::init(const char * file_name, int close_log, int log_buf_size, int spli
     {
         return false;
     }
+    LOG_INFO("create serverlog ok");
     return true;
 }
 

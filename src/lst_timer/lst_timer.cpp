@@ -2,11 +2,21 @@
 #include "../http_conn/http_conn.h"
 
 
-sort_timer_lst::sort_timer_lst():head(NULL), tail(NULL)
+sort_timer_lst::sort_timer_lst()
 {
-
+    head = NULL;
+    tail = NULL;
 }
-
+sort_timer_lst::~sort_timer_lst()
+{
+    util_timer *tmp = head;
+    while (tmp)
+    {
+        head = tmp->next;
+        delete tmp;
+        tmp = head;
+    }
+}
 void sort_timer_lst::add_timer(util_timer * timer)
 {
     if(!timer)
@@ -16,16 +26,15 @@ void sort_timer_lst::add_timer(util_timer * timer)
         head = tail = timer;
         return;
     }
-    //不存在头节点，因此对插入位置要分类讨论
-    if(timer->expire <= head->expire) //插在头指针之后
+    if(timer->expire < head->expire) //插在头指针之后
     {
         timer->next = head;
         head->prev = timer;
         head = timer;
         return;
     }
-    else   
-        add_timer(timer, head);
+       
+    add_timer(timer, head);
 }
 
 //不将这个函数写在上边函数内部，而是分出来
@@ -44,6 +53,7 @@ void sort_timer_lst::add_timer(util_timer * timer, util_timer * lst_header)
             timer->prev = prev;
             break;
         }
+        prev = tmp;
         tmp = tmp->next;
     }
 
@@ -64,8 +74,8 @@ void sort_timer_lst::adjust_timer(util_timer * timer)
     if(!timer)
         return;
     util_timer * tmp = timer->next;
-    //如果改时间后，超时值仍然比下一个定时器的超时值小，则不需要变位置
-    if(timer->expire < tmp->expire)
+    //如果改时间后，超时值仍然比下一个定时器的超时值小，则不需要变位置, 如果是尾节点，也不需要变位置
+    if(!tmp || (timer->expire < tmp->expire))
         return;
     //是链表头，则取出来从头重新插入
     if(timer == head)
@@ -75,9 +85,7 @@ void sort_timer_lst::adjust_timer(util_timer * timer)
         timer->next = NULL;
         add_timer(timer);
     }
-    //如果是尾节点，也不需要变位置
-    else if(timer->next == NULL)
-        return;
+ 
     //如果是中间的某个节点，则取出来，调用add_timer往后边插
     else
     {
@@ -96,20 +104,21 @@ void sort_timer_lst::delete_timer(util_timer * timer)
     if((timer == head) && (tail == timer))
     {
         delete timer;
-        head = tail = NULL;
+        head  = NULL;
+        tail = NULL;
         return;
     }
     if(timer == head)
     {
         head = timer->next;
-        timer->next->prev = NULL;
+        head->prev = NULL;
         delete timer;
         return;
     }
     if(timer == tail)
     {
         tail = timer->prev;
-        timer->prev->next = NULL;
+        tail->next = NULL;
         delete timer;
         return;
     }

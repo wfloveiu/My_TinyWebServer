@@ -52,9 +52,9 @@ void Websever::log_write()
         // 异步写日志
         if(m_log_write == 1)
         //单实例类，需要先获取这个单实例对象
-            Log::get_instance()->init("./ServerLog",m_close_log, 2000, 800000, 800);
+            Log::get_instance()->init("./ServerLog/log",m_close_log, 2000, 800000, 800);
         else
-            Log::get_instance()->init("./ServerLog",m_close_log, 2000, 800000, 0);
+            Log::get_instance()->init("./ServerLog/log",m_close_log, 2000, 800000, 0);
     }
 }
 
@@ -369,7 +369,6 @@ void Websever::eventloop()
         /*在eventlisten函数中已经设置好了监听描述符，并将它添加到epoll中，注册的是读事件*/
         // -1表示无线等待，知道有事件发生
         int number = epoll_wait(m_epollfd, events, MAX_EVENT_NUMBER, -1);
-
         if(number < 0 && errno != EINTR)
         {
             LOG_ERROR("%s", "epoll failure");
@@ -387,10 +386,12 @@ void Websever::eventloop()
                 continue;
             }
             //需要关闭已建立的连接
-            else if(events[i].events & (EPOLLRDHUP || EPOLLHUP || EPOLLERR))
+            else if(events[i].events & (EPOLLRDHUP | EPOLLHUP | EPOLLERR))
             {
                 util_timer * timer = user_timer[sockfd].timer;
-                deal_timer(timer, sockfd);
+                if(timer)
+                    deal_timer(timer, sockfd);
+                else continue;
             }
             //倒计时到时间后通过信号在进程间传递
             else if ((sockfd == m_pipefd[0]) && (events[i].events == EPOLLIN))

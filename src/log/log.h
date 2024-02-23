@@ -51,8 +51,8 @@ private:
         }
     }
 private: 
-    char *log_name;  //日志文件的名字
-    char *log_dirname; //日志文件的路径
+    char log_name[128];  //日志文件的名字
+    char log_dirname[128]; //日志文件的路径
     long long m_count;  // 日志今天写了多少行，每到新一天，重置
     int m_log_buf_size;  //日志缓冲区大小
     char *m_buf;   //日志缓冲区

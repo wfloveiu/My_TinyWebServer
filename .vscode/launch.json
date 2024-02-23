@@ -1,0 +1,31 @@
+{
+    // 使用 IntelliSense 了解相关属性。 
+    // 悬停以查看现有属性的描述。
+    // 欲了解更多信息，请访问: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+
+        {
+            "name": "(gdb) 启动",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/server", //修改为要调试的可执行程序路径
+            "args": [],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}", //这里是工作区根目录，注意区分"cwd": "${fileDirname}"
+            "environment": [],
+            "externalConsole": false,
+            "MIMode": "gdb",
+            "setupCommands": [
+                {
+                    "description": "为 gdb 启用整齐打印",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                }
+            ],
+            "preLaunchTask": "Build", //自动化调试，改变代码后无需手动编译即可调试，配合task.json使用
+            "miDebuggerPath": "/usr/bin/gdb"
+        }
+
+    ]
+}
